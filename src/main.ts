@@ -250,16 +250,25 @@ async function handleLogin(event: Event) {
           
           console.log("Machine ID updated successfully, waiting before retry...");
           
+          // Wait longer for backend to process and clear cache
+          statusEl.textContent = "Menunggu backend memproses update...";
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
           // Retry login with multiple attempts (backend might need time to process)
           let loginResult: { user: User } | null = null;
           let retryCount = 0;
-          const maxRetries = 3;
+          const maxRetries = 5;
           
           while (retryCount < maxRetries && !loginResult) {
-            // Wait before retry (increasing delay)
-            await new Promise(resolve => setTimeout(resolve, 1000 + (retryCount * 500)));
+            // Wait before retry (increasing delay: 2s, 3s, 4s, 5s, 6s)
+            const delay = 2000 + (retryCount * 1000);
+            if (retryCount > 0) {
+              statusEl.textContent = `Menunggu ${delay/1000} detik sebelum retry... (${retryCount + 1}/${maxRetries})`;
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
             
             statusEl.textContent = `Mencoba login kembali... (${retryCount + 1}/${maxRetries})`;
+            console.log(`Login retry attempt ${retryCount + 1}...`);
             
             try {
               loginResult = await invoke<{ user: User }>("login", {
@@ -267,6 +276,7 @@ async function handleLogin(event: Event) {
                 password,
                 machineId,
               });
+              console.log("Login retry successful!");
               break; // Success, exit loop
             } catch (retryError) {
               retryCount++;
@@ -276,10 +286,15 @@ async function handleLogin(event: Event) {
               // If it's still machine ID mismatch, continue retrying
               if (retryErrorMessage.includes("401") && retryErrorMessage.includes("machine")) {
                 if (retryCount >= maxRetries) {
-                  // Final attempt failed
-                  throw retryError;
+                  // Final attempt failed - maybe backend needs more time or different approach
+                  console.error("All retry attempts failed with machine ID mismatch");
+                  statusEl.className = "mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800";
+                  statusEl.textContent = `Gagal login setelah ${maxRetries} percobaan. Backend mungkin memerlukan waktu lebih lama untuk memproses update machine ID. Silakan coba lagi dalam beberapa detik.`;
+                  showToast("Machine ID sudah diupdate, tapi login masih gagal. Coba login lagi dalam beberapa detik.", "error");
+                  return;
                 }
-                continue; // Try again
+                // Continue to next retry
+                continue;
               } else {
                 // Different error, throw immediately
                 throw retryError;

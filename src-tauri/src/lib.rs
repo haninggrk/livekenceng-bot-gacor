@@ -400,7 +400,8 @@ async fn redeem_license(email: String, license_key: String) -> Result<RedeemLice
 async fn update_machine_id(email: String, machine_id: String, password: Option<String>) -> Result<(), String> {
     let mut body = serde_json::json!({
         "email": email,
-        "machine_id": machine_id
+        "machine_id": machine_id,
+        "app_identifier": "botgacor"
     });
     
     // Include password if provided (for force update after machine ID mismatch)
