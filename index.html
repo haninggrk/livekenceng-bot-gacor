@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bot Gacor</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <!-- Global Header -->
+    <header id="global-header" class="hidden fixed top-0 left-0 right-0 z-50 border-b border-neutral-200 bg-white shadow-sm">
+      <div class="flex items-center justify-between px-6 py-3">
+        <h1 class="text-lg font-bold text-neutral-800">Bot Gacor</h1>
+        <div class="flex gap-2">
+          <button id="btn-redeem-license-header" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50">
+            Tukarkan License
+          </button>
+          <button id="btn-change-password-header" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50">
+            ⚙️ Ganti Password
+          </button>
+          <button id="btn-logout-header" type="button" class="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50">
+            🚪 Logout
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main-container" class="container mx-auto bg-neutral-50 min-h-screen">
+      <!-- Toast Container -->
+      <div id="toast-container" class="fixed top-20 right-6 z-[9999] space-y-2"></div>
+
+      <!-- Step 0: Login / Redeem License -->
+      <section id="step-0" class="flex min-h-screen items-center justify-center p-6">
+        <div class="w-full max-w-md">
+          <div class="rounded-2xl border border-neutral-200 bg-white p-8 shadow-xl">
+            <h2 class="mb-6 text-2xl font-bold text-neutral-800">Login</h2>
+            
+            <form id="login-form" class="space-y-4">
+              <div>
+                <label for="login-email" class="mb-1.5 block text-sm font-medium text-neutral-700">Email</label>
+                <input
+                  type="email"
+                  id="login-email"
+                  required
+                  class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                  placeholder="user@example.com"
+                />
+              </div>
+              
+              <div>
+                <label for="login-password" class="mb-1.5 block text-sm font-medium text-neutral-700">Password</label>
+                <input
+                  type="password"
+                  id="login-password"
+                  required
+                  class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                  placeholder="Masukkan password"
+                />
+              </div>
+              
+              <div class="flex gap-3">
+                <button
+                  type="submit"
+                  class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Login
+                </button>
+                <button
+                  type="button"
+                  id="btn-redeem-license"
+                  class="rounded-lg border border-orange-300 bg-white px-4 py-2 text-sm text-orange-600 hover:bg-orange-50"
+                >
+                  Tukarkan License Key
+                </button>
+              </div>
+            </form>
+            
+            <div id="login-status" class="mt-4 hidden rounded-lg border p-3 text-sm"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 1: Shopee Accounts -->
+      <section id="step-1" class="hidden p-6 pt-24">
+        <div class="mx-auto max-w-4xl">
+          <!-- Breadcrumb -->
+          <nav class="mb-4 flex items-center gap-2 text-sm text-neutral-500">
+            <span class="text-orange-600 font-medium">Step 1</span>
+            <span>/</span>
+            <span class="cursor-not-allowed opacity-50">Step 2</span>
+            <span>/</span>
+            <span class="cursor-not-allowed opacity-50">Step 3</span>
+          </nav>
+          
+          <div class="mb-6 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <button id="btn-step-1-back" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50">
+                ← Kembali
+              </button>
+              <h2 class="text-2xl font-bold text-neutral-800">Akun Shopee</h2>
+            </div>
+            <div class="flex gap-2">
+              <button id="btn-add-account-qr" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50">
+                Scan QR
+              </button>
+              <button id="btn-add-account-manual" type="button" class="rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+                + Tambah Akun
+              </button>
+            </div>
+          </div>
+          
+          <div id="accounts-list" class="space-y-3"></div>
+          
+          <div class="mt-6 flex justify-end">
+            <button id="btn-step-1-next" type="button" disabled class="rounded-lg bg-orange-500 px-6 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200 disabled:cursor-not-allowed disabled:opacity-60">
+              Lanjut
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2: Niche & Product Set -->
+      <section id="step-2" class="hidden p-6 pt-24">
+        <div class="mx-auto max-w-5xl">
+          <!-- Breadcrumb -->
+          <nav class="mb-4 flex items-center gap-2 text-sm text-neutral-500">
+            <button data-breadcrumb="step-1" class="hover:text-orange-600">Step 1</button>
+            <span>/</span>
+            <span class="text-orange-600 font-medium">Step 2</span>
+            <span>/</span>
+            <span class="cursor-not-allowed opacity-50">Step 3</span>
+          </nav>
+          
+          <!-- Step Info from Previous Step -->
+          <div id="step-2-info" class="mb-4 hidden rounded-lg border border-blue-200 bg-blue-50 p-3">
+            <div class="text-sm text-blue-800">
+              <strong>Akun yang Dipilih:</strong> <span id="step-2-account-name">-</span>
+            </div>
+          </div>
+          
+          <!-- Niches Panel -->
+          <div class="mb-6 rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg">
+            <div class="mb-4 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <button id="btn-step-2-back" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50">
+                  ← Kembali
+                </button>
+                <h2 class="text-2xl font-bold text-neutral-800">Pilih Niche</h2>
+              </div>
+              <button id="btn-create-niche" type="button" class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+                + Buat Niche
+              </button>
+            </div>
+            <div id="niches-list" class="space-y-2"></div>
+          </div>
+          
+          <!-- Niche Detail Panel (when niche is clicked) -->
+          <div id="niche-detail-panel" class="mb-6 hidden rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-neutral-800">
+                Product Sets: <span id="selected-niche-name"></span>
+              </h3>
+              <div class="flex gap-2">
+                <button id="btn-create-product-set" type="button" class="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600">
+                  + Buat Product Set
+                </button>
+                <button id="btn-close-niche-detail" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50">
+                  Tutup
+                </button>
+              </div>
+            </div>
+            <div id="product-sets-list" class="space-y-2"></div>
+          </div>
+          
+          <!-- Product Set Detail Panel (when product set is clicked) -->
+          <div id="product-set-detail-panel" class="mb-6 hidden rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-neutral-800">Detail Product Set: <span id="selected-product-set-name"></span></h3>
+              <div class="flex gap-2">
+                <button id="btn-add-items" type="button" class="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-600">
+                  + Tambah Items
+                </button>
+                <button id="btn-close-product-set-detail" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50">
+                  Tutup
+                </button>
+              </div>
+            </div>
+            <div id="product-set-items-list" class="space-y-2"></div>
+          </div>
+          
+          <div class="flex justify-end">
+            <button id="btn-step-2-next" type="button" disabled class="rounded-lg bg-orange-500 px-6 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200 disabled:cursor-not-allowed disabled:opacity-60">
+              Lanjut
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 3: Run Bot -->
+      <section id="step-3" class="hidden p-6 pt-24">
+        <div class="mx-auto max-w-4xl">
+          <!-- Breadcrumb -->
+          <nav class="mb-4 flex items-center gap-2 text-sm text-neutral-500">
+            <button data-breadcrumb="step-1" class="hover:text-orange-600">Step 1</button>
+            <span>/</span>
+            <button data-breadcrumb="step-2" class="hover:text-orange-600">Step 2</button>
+            <span>/</span>
+            <span class="text-orange-600 font-medium">Step 3</span>
+          </nav>
+          
+          <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg">
+            <div class="mb-6 flex items-center gap-3">
+              <button id="btn-step-3-back" type="button" class="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50">
+                ← Kembali
+              </button>
+              <h2 class="text-2xl font-bold text-neutral-800">Jalankan Bot</h2>
+            </div>
+            
+            <!-- Step Info from Previous Steps -->
+            <div id="step-3-info" class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <div class="text-sm text-blue-800 space-y-1">
+                <div><strong>Akun:</strong> <span id="step-3-account-name">-</span></div>
+                <div><strong>Niche:</strong> <span id="step-3-niche-name">-</span></div>
+              </div>
+            </div>
+            
+            <!-- Product Sets Rotation Visualization -->
+            <div id="product-sets-rotation" class="mb-6 rounded-lg border border-neutral-200 bg-white p-4">
+              <div class="mb-3 flex items-center justify-between">
+                <h3 class="font-medium text-neutral-800">Rotasi Product Sets</h3>
+                <div class="text-xs text-neutral-500">
+                  <span id="rotation-status">Siap</span>
+                </div>
+              </div>
+              <div id="product-sets-tabs" class="flex flex-wrap gap-2">
+                <!-- Product set tabs will be rendered here -->
+              </div>
+              <div class="mt-2 text-xs text-neutral-500">
+                Klik pada product set untuk langsung menggunakan set tersebut
+              </div>
+            </div>
+            
+            <!-- Delay Input -->
+            <div class="mb-6 rounded-lg border border-orange-300 bg-orange-50 p-4">
+              <label for="delay-input" class="mb-1.5 block text-sm font-medium text-neutral-700">Delay (detik)</label>
+              <input
+                type="number"
+                id="delay-input"
+                min="1"
+                value="60"
+                class="w-full max-w-xs rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                placeholder="60"
+              />
+              <div class="mt-1 text-xs text-neutral-500">Delay akan diterapkan pada siklus berikutnya</div>
+            </div>
+            
+            <!-- Session Check Warning -->
+            <div id="bot-session-warning" class="mb-6 hidden rounded-lg border border-yellow-300 bg-yellow-50 p-4">
+              <div class="mb-3 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-yellow-800">⚠️</span>
+                  <span class="font-medium text-yellow-800">Belum ada session aktif</span>
+                </div>
+                <button id="btn-refresh-session" type="button" class="rounded-lg border border-yellow-400 bg-yellow-100 px-3 py-1.5 text-sm font-medium text-yellow-800 hover:bg-yellow-200">
+                  🔄 Refresh
+                </button>
+              </div>
+              <div class="text-sm text-yellow-700">Pastikan akun Shopee Anda memiliki live stream aktif untuk melanjutkan.</div>
+            </div>
+            
+            <!-- Session IDs Display -->
+            <div id="bot-session-ids" class="mb-6 hidden rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <div class="mb-2 flex items-center justify-between">
+                <div class="font-medium text-blue-800">Session IDs yang Diotomasi:</div>
+                <button id="btn-refresh-session-list" type="button" class="rounded-lg border border-blue-300 bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-200">
+                  🔄 Refresh
+                </button>
+              </div>
+              <div id="bot-session-ids-list" class="space-y-1 text-sm text-blue-700"></div>
+            </div>
+            
+            <div id="bot-status" class="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-green-800">
+              <div class="mb-2 font-medium">Status: <span id="bot-status-text">Siap</span></div>
+              <div id="bot-last-action" class="text-sm text-green-700"></div>
+            </div>
+            
+            <div class="flex gap-3">
+              <button id="btn-start-bot" type="button" class="rounded-lg bg-orange-500 px-6 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200 disabled:cursor-not-allowed disabled:opacity-60">
+                ▶ Mulai Bot
+              </button>
+              <button id="btn-stop-bot" type="button" class="hidden rounded-lg border border-red-300 bg-white px-6 py-2.5 font-medium text-red-700 hover:bg-red-50">
+                ⏹ Hentikan Bot
+              </button>
+            </div>
+            
+            <div id="error-countdown" class="mt-4 hidden rounded-lg border border-red-300 bg-red-50 p-4 text-red-800">
+              <div class="font-medium">Terjadi error! Aplikasi akan ditutup dalam <span id="countdown-timer">10</span> detik...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modals -->
+    
+    <!-- Redeem License Modal -->
+    <div id="modal-redeem-license" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-md w-full mx-4">
+        <h3 class="mb-4 text-xl font-bold text-neutral-800">Tukarkan License Key</h3>
+        <form id="redeem-license-form" class="space-y-4">
+          <div>
+            <label for="redeem-email" class="mb-1.5 block text-sm font-medium text-neutral-700">Email</label>
+            <input
+              type="email"
+              id="redeem-email"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="user@example.com"
+            />
+          </div>
+          <div>
+            <label for="redeem-license-key" class="mb-1.5 block text-sm font-medium text-neutral-700">License Key</label>
+            <input
+              type="text"
+              id="redeem-license-key"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="LK-ABCD-EFGH-IJKL"
+            />
+          </div>
+          <div class="flex gap-3">
+            <button type="button" id="btn-close-redeem-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+              Batal
+            </button>
+            <button type="submit" class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+              Tukarkan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="modal-change-password" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-md w-full mx-4">
+        <h3 class="mb-4 text-xl font-bold text-neutral-800">Ganti Password</h3>
+        <form id="change-password-form" class="space-y-4">
+          <div>
+            <label for="change-password-email" class="mb-1.5 block text-sm font-medium text-neutral-700">Email</label>
+            <input
+              type="email"
+              id="change-password-email"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+            />
+          </div>
+          <div>
+            <label for="change-password-new" class="mb-1.5 block text-sm font-medium text-neutral-700">Password Baru</label>
+            <input
+              type="password"
+              id="change-password-new"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+            />
+          </div>
+          <div class="flex gap-3">
+            <button type="button" id="btn-close-change-password-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+              Batal
+            </button>
+            <button type="submit" class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+              Ganti Password
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- QR Scan Modal -->
+    <div id="modal-qr-scan" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-md w-full mx-4">
+        <h3 class="mb-4 text-xl font-bold text-neutral-800">Scan QR Code</h3>
+        <div id="qr-preview" class="hidden rounded-xl border border-neutral-300 bg-neutral-50 p-4 mb-4">
+          <div class="mb-2 text-sm text-neutral-700">Scan QR ini dengan aplikasi Shopee</div>
+          <div id="qr-loading" class="mx-auto flex h-44 w-44 items-center justify-center rounded-md bg-neutral-100">
+            <div class="text-sm text-neutral-400">Memuat QR...</div>
+          </div>
+          <img id="qr-image" alt="QR Code" class="mx-auto hidden h-44 w-44 rounded-md bg-white p-2 shadow" />
+          <div id="qr-status" class="mt-2 text-center text-xs text-neutral-400 hidden">
+            <div>Status: <span id="qr-status-text">-</span></div>
+          </div>
+        </div>
+        <div id="qr-status-message" class="mb-4 hidden rounded-lg border p-3 text-sm"></div>
+        <div class="flex gap-3">
+          <button type="button" id="btn-close-qr-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+            Tutup
+          </button>
+          <button type="button" id="btn-generate-qr" class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+            Generate QR
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Account Manual Modal -->
+    <div id="modal-add-account-manual" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-md w-full mx-4">
+        <h3 class="mb-4 text-xl font-bold text-neutral-800">Tambah Akun Shopee Manual</h3>
+        <form id="add-account-manual-form" class="space-y-4">
+          <div>
+            <label for="manual-account-name" class="mb-1.5 block text-sm font-medium text-neutral-700">Nama Akun</label>
+            <input
+              type="text"
+              id="manual-account-name"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="My Shopee Account"
+            />
+          </div>
+          <div>
+            <label for="manual-account-cookie" class="mb-1.5 block text-sm font-medium text-neutral-700">Cookie</label>
+            <textarea
+              id="manual-account-cookie"
+              required
+              rows="4"
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="SPC_EC=...; SPC_F=..."
+            ></textarea>
+          </div>
+          <div class="flex gap-3">
+            <button type="button" id="btn-close-manual-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+              Batal
+            </button>
+            <button type="submit" class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+              Simpan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Create/Edit Niche Modal -->
+    <div id="modal-niche" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-md w-full mx-4">
+        <h3 id="modal-niche-title" class="mb-4 text-xl font-bold text-neutral-800">Buat Niche</h3>
+        <form id="niche-form" class="space-y-4">
+          <input type="hidden" id="niche-id" />
+          <div>
+            <label for="niche-name" class="mb-1.5 block text-sm font-medium text-neutral-700">Nama Niche</label>
+            <input
+              type="text"
+              id="niche-name"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="Fashion"
+            />
+          </div>
+          <div>
+            <label for="niche-description" class="mb-1.5 block text-sm font-medium text-neutral-700">Deskripsi (opsional)</label>
+            <textarea
+              id="niche-description"
+              rows="3"
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="Fashion products"
+            ></textarea>
+          </div>
+          <div class="flex gap-3">
+            <button type="button" id="btn-close-niche-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+              Batal
+            </button>
+            <button type="submit" class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+              Simpan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Create/Edit Product Set Modal -->
+    <div id="modal-product-set" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <h3 id="modal-product-set-title" class="mb-4 text-xl font-bold text-neutral-800">Buat Product Set</h3>
+        <form id="product-set-form" class="space-y-4">
+          <input type="hidden" id="product-set-id" />
+          <div>
+            <label for="product-set-name" class="mb-1.5 block text-sm font-medium text-neutral-700">Nama Product Set</label>
+            <input
+              type="text"
+              id="product-set-name"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="Summer Collection"
+            />
+          </div>
+          <div>
+            <label for="product-set-description" class="mb-1.5 block text-sm font-medium text-neutral-700">Deskripsi (opsional)</label>
+            <textarea
+              id="product-set-description"
+              rows="2"
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="Summer products"
+            ></textarea>
+          </div>
+          <div>
+            <label for="product-set-urls" class="mb-1.5 block text-sm font-medium text-neutral-700">
+              URLs Produk (satu URL per baris, maks 100 items)
+            </label>
+            <textarea
+              id="product-set-urls"
+              rows="10"
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-mono text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="https://shopee.co.id/product/123/456&#10;https://shopee.co.id/product/789/012&#10;https://shopee.co.id/product/345/678"
+            ></textarea>
+            <div class="mt-1 text-xs text-neutral-500">
+              Format: https://shopee.co.id/product/{shop_id}/{item_id} • Satu URL per baris
+            </div>
+            <div id="product-set-urls-count" class="mt-1 text-xs text-neutral-400">0 URL terdeteksi</div>
+            <div id="product-set-invalid-urls" class="hidden"></div>
+          </div>
+          <div>
+            <label for="product-set-niche-id" class="mb-1.5 block text-sm font-medium text-neutral-700">Niche</label>
+            <select
+              id="product-set-niche-id"
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+            >
+              <option value="">Tidak ada niche</option>
+            </select>
+          </div>
+          <div class="flex gap-3">
+            <button type="button" id="btn-close-product-set-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+              Batal
+            </button>
+            <button type="submit" class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+              Simpan
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add Items Modal -->
+    <div id="modal-add-items" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <h3 class="mb-4 text-xl font-bold text-neutral-800">Tambah Items ke Product Set</h3>
+        <form id="add-items-form" class="space-y-4">
+          <input type="hidden" id="add-items-product-set-id" />
+          <div>
+            <label for="items-urls" class="mb-1.5 block text-sm font-medium text-neutral-700">
+              URLs (satu URL per baris, maks 100 items)
+            </label>
+            <textarea
+              id="items-urls"
+              required
+              rows="10"
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 font-mono text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="https://shopee.co.id/product/123/456&#10;https://shopee.co.id/product/789/012"
+            ></textarea>
+            <div class="mt-1 text-xs text-neutral-500">
+              Format: https://shopee.co.id/product/{shop_id}/{item_id}
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <button type="button" id="btn-close-add-items-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+              Batal
+            </button>
+            <button type="submit" class="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 font-medium text-white hover:bg-orange-600 shadow-lg shadow-orange-200">
+              Tambah Items
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="modal-confirm" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-black bg-opacity-50">
+      <div class="rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl max-w-md w-full mx-4">
+        <h3 class="mb-4 text-lg font-bold text-neutral-800">Konfirmasi</h3>
+        <p id="confirm-message" class="mb-6 text-neutral-700"></p>
+        <div class="flex gap-3">
+          <button type="button" id="btn-confirm-cancel" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">
+            Batal
+          </button>
+          <button type="button" id="btn-confirm-ok" class="flex-1 rounded-lg bg-red-500 px-4 py-2.5 font-medium text-white hover:bg-red-600 shadow-lg shadow-red-200">
+            Hapus
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
