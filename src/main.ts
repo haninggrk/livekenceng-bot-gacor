@@ -188,8 +188,9 @@ async function handleLogin(event: Event) {
   const password = byId<HTMLInputElement>("login-password").value;
   const statusEl = byId("login-status");
   
+  const machineId = await invoke<string>("get_machine_id");
+  
   try {
-    const machineId = await invoke<string>("get_machine_id");
     const loginResult = await invoke<{ user: User }>("login", {
       email,
       password,
@@ -221,23 +222,98 @@ async function handleLogin(event: Event) {
     }, 1000);
     
   } catch (error) {
+    const errorMessage = String(error);
+    
+    // Check if it's a machine ID mismatch error (401 with machine ID message)
+    const isMachineIdMismatch = errorMessage.includes("401") && 
+                                (errorMessage.includes("Machine ID mismatch") || 
+                                 errorMessage.includes("machine"));
+    
+    if (isMachineIdMismatch) {
+      // Show confirmation dialog
+      const confirmed = await confirmDialog(
+        "Akun ini sedang digunakan di perangkat lain.\n\nGanti machine ID dan lanjutkan login?\n\nPerangkat lain akan otomatis logout."
+      );
+      
+      if (confirmed) {
+        try {
+          // Force update machine ID
+          await invoke("update_machine_id", {
+            email,
+            machineId,
+          });
+          
+          // Retry login after updating machine ID
+          const loginResult = await invoke<{ user: User }>("login", {
+            email,
+            password,
+            machineId,
+          });
+          
+          state.currentUser = loginResult.user;
+          state.currentPassword = password;
+          
+          statusEl.className = "mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800";
+          statusEl.textContent = "Login berhasil! Machine ID telah diperbarui.";
+          
+          setTimeout(() => {
+            byId("global-header").classList.remove("hidden");
+            showStep(1);
+            loadShopeeAccounts();
+          }, 1000);
+          
+          showToast("Machine ID berhasil diperbarui. Login berhasil!", "success");
+          return;
+          
+        } catch (retryError) {
+          console.error("Failed to update machine ID and retry login:", retryError);
+          const retryErrorMessage = String(retryError);
+          
+          // Try to extract message from JSON response
+          let finalErrorMessage = retryErrorMessage;
+          try {
+            const jsonMatch = retryErrorMessage.match(/\{.*\}/);
+            if (jsonMatch) {
+              const jsonObj = JSON.parse(jsonMatch[0]);
+              if (jsonObj.message) {
+                finalErrorMessage = jsonObj.message;
+              }
+            }
+          } catch (e) {
+            // Not JSON, use full error message
+          }
+          
+          statusEl.className = "mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800";
+          statusEl.textContent = `Gagal memperbarui machine ID: ${finalErrorMessage}`;
+          showToast(`Gagal memperbarui machine ID: ${finalErrorMessage}`, "error");
+          return;
+        }
+      } else {
+        // User cancelled
+        statusEl.className = "mt-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800";
+        statusEl.textContent = "Login dibatalkan. Machine ID tidak diperbarui.";
+        return;
+      }
+    }
+    
+    // Handle other errors
     // Extract message from error (format: "HTTP 400: {...}" or just message)
-    let errorMessage = String(error);
-    if (errorMessage.includes("HTTP")) {
+    let errorMsg = errorMessage;
+    if (errorMsg.includes("HTTP")) {
       // Try to extract JSON message from response
-      const jsonMatch = errorMessage.match(/"message":\s*"([^"]+)"/);
+      const jsonMatch = errorMsg.match(/"message":\s*"([^"]+)"/);
       if (jsonMatch) {
-        errorMessage = jsonMatch[1];
+        errorMsg = jsonMatch[1];
       } else {
         // Fallback: extract status code
-        const codeMatch = errorMessage.match(/HTTP (\d+)/);
-        errorMessage = codeMatch ? `Error ${codeMatch[1]}` : "Login gagal";
+        const codeMatch = errorMsg.match(/HTTP (\d+)/);
+        errorMsg = codeMatch ? `Error ${codeMatch[1]}` : "Login gagal";
       }
     }
     
     statusEl.className = "mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800";
-    statusEl.textContent = `Login gagal: ${errorMessage}`;
-    showToast(`Login gagal: ${errorMessage}`, "error");
+    statusEl.textContent = `Login gagal: ${errorMsg}`;
+    showToast(`Login gagal: ${errorMsg}`, "error");
   }
 }
 
