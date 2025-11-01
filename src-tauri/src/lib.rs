@@ -397,11 +397,16 @@ async fn redeem_license(email: String, license_key: String) -> Result<RedeemLice
 }
 
 #[tauri::command]
-async fn update_machine_id(email: String, machine_id: String) -> Result<(), String> {
-    let body = serde_json::json!({
+async fn update_machine_id(email: String, machine_id: String, password: Option<String>) -> Result<(), String> {
+    let mut body = serde_json::json!({
         "email": email,
         "machine_id": machine_id
     });
+    
+    // Include password if provided (for force update after machine ID mismatch)
+    if let Some(pwd) = password {
+        body["password"] = serde_json::Value::String(pwd);
+    }
     
     let response: ApiResponse<serde_json::Value> = make_api_request("POST", "/api/members/machine-id", Some(&body), None).await?;
     

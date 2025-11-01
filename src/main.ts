@@ -237,18 +237,59 @@ async function handleLogin(event: Event) {
       
       if (confirmed) {
         try {
-          // Force update machine ID
+          statusEl.className = "mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800";
+          statusEl.textContent = "Memperbarui machine ID...";
+          statusEl.classList.remove("hidden");
+          
+          // Force update machine ID (include password for authentication)
           await invoke("update_machine_id", {
             email,
             machineId,
+            password,
           });
           
-          // Retry login after updating machine ID
-          const loginResult = await invoke<{ user: User }>("login", {
-            email,
-            password,
-            machineId,
-          });
+          console.log("Machine ID updated successfully, waiting before retry...");
+          
+          // Retry login with multiple attempts (backend might need time to process)
+          let loginResult: { user: User } | null = null;
+          let retryCount = 0;
+          const maxRetries = 3;
+          
+          while (retryCount < maxRetries && !loginResult) {
+            // Wait before retry (increasing delay)
+            await new Promise(resolve => setTimeout(resolve, 1000 + (retryCount * 500)));
+            
+            statusEl.textContent = `Mencoba login kembali... (${retryCount + 1}/${maxRetries})`;
+            
+            try {
+              loginResult = await invoke<{ user: User }>("login", {
+                email,
+                password,
+                machineId,
+              });
+              break; // Success, exit loop
+            } catch (retryError) {
+              retryCount++;
+              const retryErrorMessage = String(retryError);
+              console.log(`Login retry ${retryCount} failed:`, retryErrorMessage);
+              
+              // If it's still machine ID mismatch, continue retrying
+              if (retryErrorMessage.includes("401") && retryErrorMessage.includes("machine")) {
+                if (retryCount >= maxRetries) {
+                  // Final attempt failed
+                  throw retryError;
+                }
+                continue; // Try again
+              } else {
+                // Different error, throw immediately
+                throw retryError;
+              }
+            }
+          }
+          
+          if (!loginResult) {
+            throw new Error("Gagal login setelah memperbarui machine ID setelah beberapa percobaan");
+          }
           
           state.currentUser = loginResult.user;
           state.currentPassword = password;
@@ -710,7 +751,7 @@ function renderNiches(niches: Niche[]) {
     if (editBtn) {
       editBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        e.preventDefault();
+    e.preventDefault();
         openEditNicheModal(niche);
       });
     }
