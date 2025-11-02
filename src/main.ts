@@ -71,6 +71,9 @@ const state: AppState = {
   currentProductSetIndex: 0,
 };
 
+// Machine ID validation interval
+let machineIdCheckInterval: number | null = null;
+
 // ==================== Utility Functions ====================
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -243,6 +246,9 @@ async function handleLogin(event: Event) {
       byId("global-header").classList.remove("hidden");
       showStep(1);
       loadShopeeAccounts();
+      
+      // Start periodic machine ID validation check
+      startMachineIdCheck();
     }, 1000);
     
   } catch (error) {
@@ -336,14 +342,17 @@ async function handleLogin(event: Event) {
           statusEl.className = "mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800";
           statusEl.textContent = "Login berhasil! Machine ID telah diperbarui.";
           
-          setTimeout(() => {
-            byId("global-header").classList.remove("hidden");
-            showStep(1);
-            loadShopeeAccounts();
-          }, 1000);
-          
-          showToast("Machine ID berhasil diperbarui. Login berhasil!", "success");
-          return;
+            setTimeout(() => {
+              byId("global-header").classList.remove("hidden");
+              showStep(1);
+              loadShopeeAccounts();
+              
+              // Start periodic machine ID validation check
+              startMachineIdCheck();
+            }, 1000);
+
+            showToast("Machine ID berhasil diperbarui. Login berhasil!", "success");
+            return;
           
         } catch (retryError) {
           console.error("Failed to update machine ID and retry login:", retryError);
@@ -1736,8 +1745,118 @@ function startErrorCountdown() {
       clearInterval(interval);
       // Exit app - in Tauri you might want to close window
       showToast("Aplikasi akan ditutup...", "error");
+      // Close the app window
+      setTimeout(async () => {
+        try {
+          // Use Tauri command to close window
+          await invoke("close_window");
+          console.log("App window closed successfully");
+        } catch (err) {
+          console.error("Failed to close app:", err);
+          // Fallback: try direct window close if available
+          try {
+            if (typeof window !== "undefined" && window.close) {
+              window.close();
+            }
+          } catch (fallbackErr) {
+            console.error("Fallback close also failed:", fallbackErr);
+          }
+        }
+      }, 500);
     }
   }, 1000);
+}
+
+async function checkMachineIdValidation() {
+  if (!state.currentUser || !state.currentPassword) {
+    return;
+  }
+  
+  try {
+    // Get current device's machine ID
+    const currentMachineId = await invoke<string>("get_machine_id");
+    
+    // Get machine ID from server for this user
+    const serverMachineIdResponse = await invoke<{ 
+      success: boolean;
+      email: string;
+      machine_id: string;
+      app_identifier?: string;
+    }>("get_user_machine_id", {
+      email: state.currentUser.email,
+    });
+    
+    // Compare machine IDs
+    if (serverMachineIdResponse.machine_id !== currentMachineId) {
+      console.error("Machine ID mismatch detected!", {
+        current: currentMachineId,
+        server: serverMachineIdResponse.machine_id
+      });
+      
+      // Stop all intervals and bot
+      stopMachineIdCheck();
+      if (state.isBotRunning) {
+        stopBot();
+      }
+      
+      // Show warning message
+      showToast("Machine ID mismatch terdeteksi. Aplikasi akan ditutup dalam 10 detik.", "error");
+      
+      // Start 10-second countdown and close app
+      startErrorCountdown();
+      return;
+    }
+    
+    // Machine ID matches - validation OK
+    console.log("Machine ID validation OK");
+    
+  } catch (error) {
+    const errorMessage = String(error);
+    
+    // Check if it's a machine ID mismatch error (401 with machine ID message)
+    const isMachineIdMismatch = errorMessage.includes("401") && 
+                                (errorMessage.includes("Machine ID mismatch") || 
+                                 errorMessage.includes("machine"));
+    
+    if (isMachineIdMismatch) {
+      console.error("Machine ID mismatch detected via API error! Closing app...");
+      
+      // Stop all intervals and bot
+      stopMachineIdCheck();
+      if (state.isBotRunning) {
+        stopBot();
+      }
+      
+      // Show warning message
+      showToast("Machine ID mismatch terdeteksi. Aplikasi akan ditutup dalam 10 detik.", "error");
+      
+      // Start 10-second countdown and close app
+      startErrorCountdown();
+    } else {
+      // Other errors - just log, don't close app
+      console.log("Machine ID check error (non-fatal):", errorMessage);
+    }
+  }
+}
+
+function startMachineIdCheck() {
+  // Clear any existing interval
+  if (machineIdCheckInterval !== null) {
+    clearInterval(machineIdCheckInterval);
+  }
+  
+  // Check immediately, then every 30 seconds
+  checkMachineIdValidation();
+  machineIdCheckInterval = window.setInterval(() => {
+    checkMachineIdValidation();
+  }, 30000); // 30 seconds
+}
+
+function stopMachineIdCheck() {
+  if (machineIdCheckInterval !== null) {
+    clearInterval(machineIdCheckInterval);
+    machineIdCheckInterval = null;
+  }
 }
 
 async function startBot() {
@@ -1985,6 +2104,8 @@ window.addEventListener("DOMContentLoaded", () => {
   
   // Logout
   byId("btn-logout-header").addEventListener("click", () => {
+    // Stop machine ID check
+    stopMachineIdCheck();
     state.currentUser = null;
     state.currentPassword = "";
     state.selectedAccount = null;

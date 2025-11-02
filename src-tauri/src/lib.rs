@@ -362,6 +362,31 @@ async fn get_machine_id() -> Result<String, String> {
     Ok(get_or_generate_machine_id())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct MachineIdResponse {
+    success: bool,
+    email: String,
+    machine_id: String,
+    app_identifier: Option<String>,
+}
+
+#[tauri::command]
+async fn get_user_machine_id(email: String) -> Result<MachineIdResponse, String> {
+    let encoded_email = urlencoding::encode(&email);
+    // Endpoint already includes query param in URL
+    let endpoint = format!("/api/members/machine-id/{}?app_identifier=botgacor", encoded_email);
+    
+    // API returns flat structure, not wrapped in data field
+    // Response: {"success":true,"email":"...","machine_id":"...","app_identifier":"..."}
+    let response: MachineIdResponse = make_api_request("GET", &endpoint, None, None).await?;
+    
+    if !response.success {
+        return Err("Failed to get machine ID from server".to_string());
+    }
+    
+    Ok(response)
+}
+
 #[tauri::command]
 async fn login(email: String, password: String, machine_id: String) -> Result<LoginResponse, String> {
     let request = LoginRequest {
@@ -964,12 +989,21 @@ async fn get_account_info(cookies: String) -> Result<ShopeeAccountInfo, String> 
     info_response.data.ok_or_else(|| "No account info in response".to_string())
 }
 
+#[tauri::command]
+async fn close_window(window: tauri::Window) {
+    window.close().unwrap_or_else(|e| {
+        eprintln!("Failed to close window: {}", e);
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_machine_id,
+            get_user_machine_id,
+            close_window,
             login,
             redeem_license,
             update_machine_id,
