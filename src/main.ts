@@ -50,7 +50,7 @@ interface AppState {
   errorCount: number;
   isBotRunning: boolean;
   botIntervalId: number | null;
-  sessionIds: string[]; // Session IDs for selected account
+  sessionId: string | null; // Single session ID for selected account (or null if no active session)
   currentProductSetIndex: number; // Current product set being used in rotation
 }
 
@@ -67,7 +67,7 @@ const state: AppState = {
   errorCount: 0,
   isBotRunning: false,
   botIntervalId: null,
-  sessionIds: [],
+  sessionId: null,
   currentProductSetIndex: 0,
 };
 
@@ -115,6 +115,13 @@ async function showStep(step: number) {
   }
   
   if (step === 3) {
+    console.log("Entering Step 3", {
+      selectedAccount: state.selectedAccount,
+      selectedNiche: state.selectedNiche,
+      hasUser: !!state.currentUser,
+      selectedProductSetsCount: state.selectedProductSets.length
+    });
+    
     const delayInput = byId<HTMLInputElement>("delay-input");
     if (delayInput) {
       delayInput.value = state.delay.toString();
@@ -123,17 +130,34 @@ async function showStep(step: number) {
     // Update step 3 info
     if (state.selectedAccount) {
       byId("step-3-account-name").textContent = state.selectedAccount.name;
-      byId("bot-account-name").textContent = state.selectedAccount.name;
+      const botAccountName = document.getElementById("bot-account-name");
+      if (botAccountName) botAccountName.textContent = state.selectedAccount.name;
+    } else {
+      console.error("No selected account when entering Step 3!");
+      byId("step-3-account-name").textContent = "Akun belum dipilih";
+      const botAccountName = document.getElementById("bot-account-name");
+      if (botAccountName) botAccountName.textContent = "Akun belum dipilih";
     }
     if (state.selectedNiche) {
       byId("step-3-niche-name").textContent = state.selectedNiche.name;
-      byId("bot-niche-name").textContent = state.selectedNiche.name;
+      const botNicheName = document.getElementById("bot-niche-name");
+      if (botNicheName) botNicheName.textContent = state.selectedNiche.name;
+      
+      // Reload product sets to ensure we have full data with items
+      console.log("Reloading product sets for niche:", state.selectedNiche.id);
+      await loadProductSetsForNiche(state.selectedNiche.id);
+      console.log("Product sets loaded:", state.selectedProductSets.map(ps => ({
+        id: ps.id,
+        name: ps.name,
+        itemsCount: ps.items?.length || 0
+      })));
     }
     
     // Render product sets rotation visualization
     renderProductSetsRotation();
     
     // Check sessions before showing Step 3
+    console.log("About to call checkSessions() from showStep(3)");
     await checkSessions();
   }
 }
@@ -1524,20 +1548,23 @@ async function switchToProductSet(index: number) {
   
   // Immediately replace products with the selected set
   try {
-    if (state.sessionIds.length === 0) {
+    if (!state.sessionId) {
       showToast("Tidak ada session aktif", "error");
-      return;
+      // Try to refresh session
+      await checkSessions();
+      if (!state.sessionId) {
+        return;
+      }
     }
     
-    for (const sessionId of state.sessionIds) {
-      await invoke("replace_products", {
-        email: state.currentUser.email,
-        password: state.currentPassword,
-        shopeeAccountId: state.selectedAccount.id,
-        sessionId,
-        productSetId: productSet.id,
-      });
-    }
+    // Use the single session ID
+    await invoke("replace_products", {
+      email: state.currentUser.email,
+      password: state.currentPassword,
+      shopeeAccountId: state.selectedAccount.id,
+      sessionId: state.sessionId,
+      productSetId: productSet.id,
+    });
     
     showToast(`Switched ke product set "${productSet.name}"`, "success");
     byId("bot-status-text").textContent = "Berjalan";
@@ -1555,53 +1582,142 @@ async function switchToProductSet(index: number) {
 }
 
 async function checkSessions() {
+  console.log("checkSessions() called", {
+    hasUser: !!state.currentUser,
+    hasAccount: !!state.selectedAccount,
+    accountId: state.selectedAccount?.id,
+    accountName: state.selectedAccount?.name
+  });
+  
   if (!state.currentUser || !state.selectedAccount) {
+    console.warn("Cannot check sessions: missing user or account", {
+      user: state.currentUser?.email,
+      account: state.selectedAccount
+    });
+    byId("bot-status-text").textContent = "Error: Akun belum dipilih";
+    byId("rotation-status").textContent = "Akun belum dipilih";
     return;
   }
   
+  // Show loading state
+  const startBotBtn = byId<HTMLButtonElement>("btn-start-bot");
+  const warningDiv = byId("bot-session-warning");
+  const sessionIdsDiv = byId("bot-session-ids");
+  const rotationStatus = byId("rotation-status");
+  
+  startBotBtn.disabled = true;
+  byId("bot-status-text").textContent = "Memeriksa session...";
+  rotationStatus.textContent = "Memeriksa...";
+  sessionIdsDiv.classList.add("hidden");
+  warningDiv.classList.add("hidden");
+  
   try {
-    const sessionResult = await invoke<{ session_ids: string[] }>("get_session_ids", {
+    console.log("Fetching session IDs for account:", state.selectedAccount.id);
+    
+    // Validate all required parameters
+    if (!state.currentPassword) {
+      throw new Error("Password tidak tersedia. Silakan login ulang.");
+    }
+    
+    const requestParams = {
       email: state.currentUser.email,
       password: state.currentPassword,
       shopeeAccountId: state.selectedAccount.id,
+    };
+    
+    console.log("Request parameters:", {
+      email: requestParams.email,
+      hasPassword: !!requestParams.password,
+      shopeeAccountId: requestParams.shopeeAccountId
     });
     
-    state.sessionIds = sessionResult.session_ids || [];
+    console.log("Calling invoke('get_session_ids', ...)");
+    const sessionResult = await invoke<{ session_ids: string[] }>("get_session_ids", requestParams);
     
-    // Update UI based on session availability
-    const startBotBtn = byId<HTMLButtonElement>("btn-start-bot");
-    const warningDiv = byId("bot-session-warning");
-    const sessionIdsDiv = byId("bot-session-ids");
+    console.log("Session result received:", sessionResult);
     
-    if (state.sessionIds.length === 0) {
-      // No sessions - show warning and disable button
+    // API returns array, but we only expect one session ID (or empty array)
+    const sessionIds = sessionResult.session_ids || [];
+    state.sessionId = sessionIds.length > 0 ? sessionIds[0] : null;
+    
+    console.log("Session ID:", state.sessionId);
+    
+    if (!state.sessionId) {
+      // No session - show warning and disable button
       warningDiv.classList.remove("hidden");
       sessionIdsDiv.classList.add("hidden");
       startBotBtn.disabled = true;
-      byId("bot-status-text").textContent = "Tidak ada session";
+      byId("bot-status-text").textContent = "Tidak ada session aktif";
+      rotationStatus.textContent = "Tidak ada session";
+      showToast("Belum ada session aktif. Pastikan live stream sedang berjalan.", "info");
     } else {
-      // Has sessions - show session list and enable button
+      // Has session - show session ID and enable button
       warningDiv.classList.add("hidden");
       sessionIdsDiv.classList.remove("hidden");
       startBotBtn.disabled = false;
       byId("bot-status-text").textContent = "Siap";
+      rotationStatus.textContent = "Session aktif";
       
-      // Display session IDs
-      byId("bot-session-ids-list").innerHTML = state.sessionIds
-        .map(sid => `<div class="font-mono">${sid}</div>`)
-        .join("");
+      // Display session ID
+      byId("bot-session-ids-list").innerHTML = `<div class="font-mono text-sm">Session ID: ${state.sessionId}</div>`;
+      
+      showToast("Session aktif ditemukan", "success");
     }
   } catch (error) {
     console.error("Error checking sessions:", error);
     showToast(`Gagal memuat session: ${error}`, "error");
     
     // On error, disable button and show warning
-    const startBotBtn = byId<HTMLButtonElement>("btn-start-bot");
-    const warningDiv = byId("bot-session-warning");
     startBotBtn.disabled = true;
     warningDiv.classList.remove("hidden");
+    sessionIdsDiv.classList.add("hidden");
     byId("bot-status-text").textContent = "Error memuat session";
+    rotationStatus.textContent = "Error";
   }
+}
+
+// Countdown timer state
+let delayCountdownInterval: number | null = null;
+
+function startDelayCountdown(seconds: number, nextSetName: string) {
+  // Clear any existing countdown
+  if (delayCountdownInterval !== null) {
+    clearInterval(delayCountdownInterval);
+  }
+  
+  const countdownEl = byId("delay-countdown");
+  const nextSetEl = byId("delay-next-set");
+  
+  countdownEl.classList.remove("hidden");
+  nextSetEl.textContent = nextSetName;
+  
+  let remaining = seconds;
+  updateDelayTimer(remaining);
+  
+  delayCountdownInterval = window.setInterval(() => {
+    remaining--;
+    updateDelayTimer(remaining);
+    
+    if (remaining <= 0) {
+      clearInterval(delayCountdownInterval!);
+      delayCountdownInterval = null;
+      countdownEl.classList.add("hidden");
+    }
+  }, 1000);
+}
+
+function stopDelayCountdown() {
+  if (delayCountdownInterval !== null) {
+    clearInterval(delayCountdownInterval);
+    delayCountdownInterval = null;
+  }
+  byId("delay-countdown").classList.add("hidden");
+}
+
+function updateDelayTimer(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  byId("delay-countdown-timer").textContent = `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
 function startErrorCountdown() {
@@ -1627,11 +1743,31 @@ function startErrorCountdown() {
 async function startBot() {
   if (!state.currentUser || !state.selectedAccount || !state.selectedNiche) return;
   
-  // Check if we have sessions (re-check before starting)
-  if (state.sessionIds.length === 0) {
+  // Ensure product sets are loaded with items
+  if (state.selectedProductSets.length === 0) {
+    showToast("Memuat product sets...", "info");
+    await loadProductSetsForNiche(state.selectedNiche.id);
+  }
+  
+  // Filter out product sets with no items
+  const productSetsWithItems = state.selectedProductSets.filter(ps => ps.items && ps.items.length > 0);
+  
+  if (productSetsWithItems.length === 0) {
+    showToast("Tidak ada product set dengan items. Pastikan product set memiliki produk.", "error");
+    return;
+  }
+  
+  // Update selected product sets to only include those with items
+  state.selectedProductSets = productSetsWithItems;
+  
+  // Check if we have a session (re-check before starting)
+  if (!state.sessionId) {
     showToast("Tidak ada session aktif. Pastikan akun Shopee memiliki live stream aktif.", "error");
     await checkSessions();
-    return;
+    if (!state.sessionId) {
+      // Still no session after refresh
+      return;
+    }
   }
   
   state.isBotRunning = true;
@@ -1647,104 +1783,140 @@ async function startBot() {
   renderProductSetsRotation();
   
   // Update bot info
-  byId("bot-account-name").textContent = state.selectedAccount.name;
-  byId("bot-niche-name").textContent = state.selectedNiche.name;
-  byId("bot-product-sets-count").textContent = state.selectedProductSets.length.toString();
+  const botAccountName = document.getElementById("bot-account-name");
+  if (botAccountName) botAccountName.textContent = state.selectedAccount.name;
+  const botNicheName = document.getElementById("bot-niche-name");
+  if (botNicheName) botNicheName.textContent = state.selectedNiche.name;
+  const botProductSetsCount = document.getElementById("bot-product-sets-count");
+  if (botProductSetsCount) botProductSetsCount.textContent = state.selectedProductSets.length.toString();
   
   async function botLoop() {
     if (!state.isBotRunning || !state.currentUser || !state.selectedAccount) return;
     
-    // Get current delay dynamically (can be changed during run)
-    const delayMs = state.delay * 1000;
+    // Get current delay dynamically from input (can be changed during run)
+    const delayInput = byId<HTMLInputElement>("delay-input");
+    const currentDelay = parseInt(delayInput.value) || 60;
+    state.delay = currentDelay; // Update state for consistency
+    const delayMs = currentDelay * 1000;
     
     try {
-      // Get session IDs
+      // Check for active session before each cycle
       const sessionResult = await invoke<{ session_ids: string[] }>("get_session_ids", {
         email: state.currentUser.email,
         password: state.currentPassword,
         shopeeAccountId: state.selectedAccount.id,
       });
       
-      // Display session IDs
-      if (sessionResult.session_ids.length > 0) {
+      // Get single session ID (or null)
+      const sessionIds = sessionResult.session_ids || [];
+      const sessionId = sessionIds.length > 0 ? sessionIds[0] : null;
+      state.sessionId = sessionId;
+      
+      // Update UI with session status
+      if (sessionId) {
         byId("bot-session-ids").classList.remove("hidden");
-        byId("bot-session-ids-list").innerHTML = sessionResult.session_ids
-          .map(sid => `<div class="font-mono">${sid}</div>`)
-          .join("");
+        byId("bot-session-ids-list").innerHTML = `<div class="font-mono text-sm">Session ID: ${sessionId}</div>`;
       } else {
         byId("bot-session-ids").classList.add("hidden");
       }
       
-      if (sessionResult.session_ids.length === 0) {
-        byId("bot-status-text").textContent = "Tidak ada session";
+      // If no session, wait and try again (keep looping until session is found)
+      if (!sessionId) {
+        byId("bot-status-text").textContent = "Menunggu session aktif...";
+        byId("bot-last-action").textContent = "Session tidak ditemukan. Bot akan terus memeriksa...";
+        startDelayCountdown(currentDelay, "Memeriksa session...");
         await new Promise(resolve => setTimeout(resolve, delayMs));
-        botLoop();
+        stopDelayCountdown();
+        if (state.isBotRunning) {
+          botLoop();
+        }
         return;
       }
       
       if (state.selectedProductSets.length === 0) {
         byId("bot-status-text").textContent = "Tidak ada product set";
+        startDelayCountdown(currentDelay, "Memuat product sets...");
         await new Promise(resolve => setTimeout(resolve, delayMs));
-        botLoop();
+        stopDelayCountdown();
+        if (state.isBotRunning) {
+          botLoop();
+        }
         return;
       }
       
       // Get current product set based on rotation index
       const productSet = state.selectedProductSets[state.currentProductSetIndex];
       
-      // For each session_id, replace products with current set
-      for (const sessionId of sessionResult.session_ids) {
-        if (!state.isBotRunning) break;
+      // Use the single session ID to replace products
+      try {
+        await invoke("replace_products", {
+          email: state.currentUser!.email,
+          password: state.currentPassword,
+          shopeeAccountId: state.selectedAccount!.id,
+          sessionId: sessionId,
+          productSetId: productSet.id,
+        });
         
-        try {
-          await invoke("replace_products", {
-            email: state.currentUser!.email,
-            password: state.currentPassword,
-            shopeeAccountId: state.selectedAccount!.id,
-            sessionId,
-            productSetId: productSet.id,
-          });
-          
-          state.errorCount = 0; // Reset on success
-          
-          byId("bot-status-text").textContent = "Berjalan";
-          byId("bot-last-action").textContent = `Set "${productSet.name}" → Session ${sessionId.substring(0, 8)}...`;
-          
-          // Update rotation visualization
-          renderProductSetsRotation();
-          
-        } catch (error) {
-          state.errorCount++;
-          
-          // Check if error is 400 or 422
-          const errorStr = String(error);
-          if (errorStr.includes("400") || errorStr.includes("422")) {
-            if (state.errorCount >= 3) {
-              state.isBotRunning = false;
-              startErrorCountdown();
-              return;
-            }
+        state.errorCount = 0; // Reset on success
+        
+        byId("bot-status-text").textContent = "Berjalan";
+        byId("bot-last-action").textContent = `Set "${productSet.name}" → Session ${sessionId.substring(0, 8)}...`;
+        
+        // Update rotation visualization
+        renderProductSetsRotation();
+        
+        // Move to next product set for next cycle
+        state.currentProductSetIndex = (state.currentProductSetIndex + 1) % state.selectedProductSets.length;
+        
+        // Get next product set name for countdown display
+        const nextIndex = state.currentProductSetIndex;
+        const nextProductSet = state.selectedProductSets[nextIndex];
+        const nextSetName = nextProductSet ? nextProductSet.name : "Tidak ada";
+        
+        // Wait before next cycle with countdown
+        if (state.isBotRunning) {
+          startDelayCountdown(currentDelay, nextSetName);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          stopDelayCountdown();
+          if (state.isBotRunning) {
+            botLoop();
           }
-          
-          // Check if machine_id mismatch (401)
-          if (errorStr.includes("401") && errorStr.includes("machine")) {
+        }
+        
+      } catch (error) {
+        state.errorCount++;
+        
+        // Check if error is 400 or 422
+        const errorStr = String(error);
+        if (errorStr.includes("400") || errorStr.includes("422")) {
+          if (state.errorCount >= 3) {
             state.isBotRunning = false;
             startErrorCountdown();
             return;
           }
-          
-          showToast(`Error: ${error}`, "error");
         }
-      }
-      
-      // Move to next product set in rotation
-      if (state.isBotRunning) {
-        state.currentProductSetIndex = (state.currentProductSetIndex + 1) % state.selectedProductSets.length;
-        renderProductSetsRotation();
         
-        // Wait before next cycle
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        botLoop();
+        // Check if machine_id mismatch (401)
+        if (errorStr.includes("401") && errorStr.includes("machine")) {
+          state.isBotRunning = false;
+          startErrorCountdown();
+          return;
+        }
+        
+        showToast(`Error: ${error}`, "error");
+        
+        // Wait and continue loop
+        if (state.isBotRunning) {
+          const nextIndex = state.currentProductSetIndex;
+          const nextProductSet = state.selectedProductSets[nextIndex];
+          const nextSetName = nextProductSet ? nextProductSet.name : "Retry";
+          startDelayCountdown(currentDelay, nextSetName);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          stopDelayCountdown();
+          if (state.isBotRunning) {
+            botLoop();
+          }
+        }
       }
       
     } catch (error) {
@@ -1754,13 +1926,22 @@ async function startBot() {
       if (errorStr.includes("400") || errorStr.includes("422")) {
         if (state.errorCount >= 3) {
           state.isBotRunning = false;
+          stopDelayCountdown();
           startErrorCountdown();
           return;
         }
       }
       
       showToast(`Error: ${error}`, "error");
+      
+      // Get delay again in case it changed
+      const delayInput = byId<HTMLInputElement>("delay-input");
+      const currentDelay = parseInt(delayInput.value) || 60;
+      const delayMs = currentDelay * 1000;
+      
+      startDelayCountdown(currentDelay, "Retry...");
       await new Promise(resolve => setTimeout(resolve, delayMs));
+      stopDelayCountdown();
       if (state.isBotRunning) botLoop();
     }
   }
@@ -1770,6 +1951,7 @@ async function startBot() {
 
 function stopBot() {
   state.isBotRunning = false;
+  stopDelayCountdown(); // Stop countdown timer
   byId("btn-start-bot").classList.remove("hidden");
   byId("btn-stop-bot").classList.add("hidden");
   byId("bot-status-text").textContent = "Dihentikan";
