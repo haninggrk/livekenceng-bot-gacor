@@ -255,6 +255,32 @@
               />
               <div class="mt-1 text-xs text-neutral-500">Delay akan diterapkan pada siklus berikutnya</div>
               
+              <!-- Loop Option -->
+              <div class="mt-4 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="loop-checkbox"
+                  class="h-4 w-4 rounded border-neutral-300 text-orange-600 focus:ring-orange-500"
+                />
+                <label for="loop-checkbox" class="text-sm font-medium text-neutral-700 cursor-pointer">
+                  Loop (kembali ke set awal setelah set terakhir)
+                </label>
+              </div>
+              
+              <!-- Loop Delay Input (only shown when loop is checked) -->
+              <div id="loop-delay-container" class="mt-3 hidden">
+                <label for="loop-delay-input" class="mb-1.5 block text-sm font-medium text-neutral-700">Delay antar Loop (detik)</label>
+                <input
+                  type="number"
+                  id="loop-delay-input"
+                  min="1"
+                  value="60"
+                  class="w-full max-w-xs rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                  placeholder="60"
+                />
+                <div class="mt-1 text-xs text-neutral-500">Delay sebelum kembali ke set awal</div>
+              </div>
+              
               <!-- Countdown Timer -->
               <div id="delay-countdown" class="mt-3 hidden">
                 <div class="flex items-center gap-2 text-sm">
@@ -340,6 +366,17 @@
               class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
               placeholder="LK-ABCD-EFGH-IJKL"
             />
+          </div>
+          <div>
+            <label for="redeem-password" class="mb-1.5 block text-sm font-medium text-neutral-700">Password</label>
+            <input
+              type="password"
+              id="redeem-password"
+              required
+              class="w-full rounded-lg border border-neutral-300 bg-white px-4 py-2.5 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+              placeholder="Masukkan password untuk login"
+            />
+            <div class="mt-1 text-xs text-neutral-500">Password akan digunakan untuk login setelah redeem license</div>
           </div>
           <div class="flex gap-3">
             <button type="button" id="btn-close-redeem-modal" class="flex-1 rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-50">

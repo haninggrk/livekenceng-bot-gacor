@@ -46,6 +46,7 @@ pub struct RedeemLicenseResponse {
     pub expiry_date: Option<String>,
     pub days_added: Option<i32>,
     pub is_new_member: bool,
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -249,7 +250,8 @@ pub struct LoginResult {
 pub struct ShopeeAccountInfo {
     pub userid: i64,
     pub username: String,
-    pub nickname: String,
+    #[serde(default)]
+    pub nickname: Option<String>,
     pub email: Option<String>,
     pub phone: Option<String>,
 }
@@ -444,10 +446,15 @@ async fn update_machine_id(email: String, machine_id: String, password: Option<S
 }
 
 #[tauri::command]
-async fn change_password(email: String, new_password: String, machine_id: String) -> Result<(), String> {
+async fn change_password(
+    email: String,
+    new_password: String,
+    machine_id: String,
+    current_password: Option<String>,
+) -> Result<(), String> {
     let request = ChangePasswordRequest {
         email,
-        current_password: None,
+        current_password,
         new_password,
         machine_id,
     };

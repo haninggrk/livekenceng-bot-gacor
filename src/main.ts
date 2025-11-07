@@ -52,6 +52,8 @@ interface AppState {
   botIntervalId: number | null;
   sessionId: string | null; // Single session ID for selected account (or null if no active session)
   currentProductSetIndex: number; // Current product set being used in rotation
+  isLoopEnabled: boolean; // Whether bot should loop back to first set
+  loopDelay: number; // Delay between loops (when looping back to start)
 }
 
 // ==================== State ====================
@@ -69,6 +71,8 @@ const state: AppState = {
   botIntervalId: null,
   sessionId: null,
   currentProductSetIndex: 0,
+  isLoopEnabled: false,
+  loopDelay: 60,
 };
 
 // Machine ID validation interval
@@ -411,25 +415,60 @@ async function handleRedeemLicense(event: Event) {
   
   const email = byId<HTMLInputElement>("redeem-email").value;
   const licenseKey = byId<HTMLInputElement>("redeem-license-key").value;
+  const password = byId<HTMLInputElement>("redeem-password").value;
   
   try {
     const result = await invoke<{
       expiry_date?: string;
       days_added?: number;
       is_new_member: boolean;
+      password?: string;
     }>("redeem_license", { email, licenseKey });
+    
+    const tempPassword = result.password;
+    let passwordChanged = false;
+    let passwordErrorMessage: string | null = null;
+    
+    if (tempPassword) {
+      try {
+        const machineId = await invoke<string>("get_machine_id");
+        await invoke("change_password", {
+          email,
+          currentPassword: tempPassword,
+          newPassword: password,
+          machineId,
+        });
+        passwordChanged = true;
+      } catch (passwordError) {
+        console.error("Failed to change password:", passwordError);
+        passwordErrorMessage = String(passwordError);
+      }
+    }
     
     hideModal("modal-redeem-license");
     
     if (result.is_new_member) {
-      // Show change password modal
-      byId<HTMLInputElement>("change-password-email").value = email;
-      showModal("modal-change-password");
-      showToast("Akun baru dibuat! Silakan buat password baru.", "info");
+      if (passwordChanged) {
+        showToast("Akun baru dibuat dan password berhasil diatur!", "success");
+      } else if (passwordErrorMessage) {
+        showToast(`License berhasil ditukarkan, tapi gagal mengubah password: ${passwordErrorMessage}`, "error");
+      } else {
+        showToast("Akun baru dibuat! Gunakan password sementara dari email Anda.", "info");
+      }
     } else {
-      showToast(`License berhasil ditukarkan! ${result.days_added || 0} hari ditambahkan.`, "success");
+      if (passwordChanged) {
+        showToast("License berhasil ditukarkan dan password diperbarui.", "success");
+      } else if (passwordErrorMessage) {
+        showToast(`License berhasil ditukarkan, tapi gagal mengubah password: ${passwordErrorMessage}`, "error");
+      } else {
+        showToast("License berhasil ditukarkan!", "success");
+      }
     }
     
+    if (passwordChanged && state.currentUser && state.currentUser.email === email) {
+      state.currentPassword = password;
+    }
+
   } catch (error) {
     // Extract message from error
     let errorMessage = String(error);
@@ -454,7 +493,15 @@ async function handleChangePassword(event: Event) {
   
   try {
     const machineId = await invoke<string>("get_machine_id");
-    await invoke("change_password", { email, newPassword, machineId });
+    await invoke("change_password", {
+      email,
+      newPassword,
+      machineId,
+      currentPassword: state.currentPassword || undefined,
+    });
+    if (state.currentUser && state.currentUser.email === email) {
+      state.currentPassword = newPassword;
+    }
     
     hideModal("modal-change-password");
     showToast("Password berhasil diubah!", "success");
@@ -638,7 +685,7 @@ async function handleQRConfirmed(qrcode_token: string) {
       statusMsg.textContent = "Login berhasil! Mengambil info akun...";
       
       try {
-        const accountInfo = await invoke<{ userid: number; username: string; nickname: string }>("get_account_info", { cookies: loginResult.cookies });
+        const accountInfo = await invoke<{ userid: number; username: string; nickname?: string | null }>("get_account_info", { cookies: loginResult.cookies });
         
         const accountName = accountInfo.nickname 
           ? `${accountInfo.username} / ${accountInfo.nickname}`
@@ -1897,6 +1944,10 @@ async function startBot() {
   // Get initial delay from input
   state.delay = parseInt(byId<HTMLInputElement>("delay-input").value) || 60;
   
+  // Get loop settings from UI
+  state.isLoopEnabled = (byId<HTMLInputElement>("loop-checkbox")).checked;
+  state.loopDelay = parseInt(byId<HTMLInputElement>("loop-delay-input").value) || 60;
+  
   // Reset rotation to start
   state.currentProductSetIndex = 0;
   renderProductSetsRotation();
@@ -1984,8 +2035,45 @@ async function startBot() {
         // Update rotation visualization
         renderProductSetsRotation();
         
+        // Check if we've reached the last set
+        const isLastSet = state.currentProductSetIndex === state.selectedProductSets.length - 1;
+        
+        if (isLastSet && !state.isLoopEnabled) {
+          // Not looping - stop at last set
+          byId("bot-status-text").textContent = "Selesai";
+          byId("bot-last-action").textContent = `Set terakhir "${productSet.name}" selesai. Bot dihentikan.`;
+          stopBot();
+          showToast("Bot selesai. Semua set telah dijalankan.", "info");
+          return;
+        }
+        
         // Move to next product set for next cycle
-        state.currentProductSetIndex = (state.currentProductSetIndex + 1) % state.selectedProductSets.length;
+        if (isLastSet && state.isLoopEnabled) {
+          // Loop back to first set with delay
+          const loopDelayInput = byId<HTMLInputElement>("loop-delay-input");
+          const loopDelaySeconds = parseInt(loopDelayInput.value) || 60;
+          state.loopDelay = loopDelaySeconds;
+          
+          byId("bot-status-text").textContent = "Menunggu loop...";
+          byId("bot-last-action").textContent = `Set terakhir selesai. Kembali ke set awal dalam ${loopDelaySeconds} detik...`;
+          
+          startDelayCountdown(loopDelaySeconds, state.selectedProductSets[0]?.name || "Set awal");
+          await new Promise(resolve => setTimeout(resolve, loopDelaySeconds * 1000));
+          stopDelayCountdown();
+          
+          // Reset to first set and continue immediately
+          state.currentProductSetIndex = 0;
+          renderProductSetsRotation();
+          
+          // Continue loop immediately (will execute first set)
+          if (state.isBotRunning) {
+            botLoop();
+          }
+          return; // Exit early, don't wait for normal delay
+        } else {
+          // Move to next set
+          state.currentProductSetIndex = (state.currentProductSetIndex + 1) % state.selectedProductSets.length;
+        }
         
         // Get next product set name for countdown display
         const nextIndex = state.currentProductSetIndex;
@@ -2217,6 +2305,24 @@ window.addEventListener("DOMContentLoaded", () => {
   byId("delay-input").addEventListener("input", (e) => {
     const delay = parseInt((e.target as HTMLInputElement).value) || 60;
     state.delay = delay;
+  });
+  
+  // Step 3 - Loop checkbox
+  byId("loop-checkbox").addEventListener("change", (e) => {
+    const isChecked = (e.target as HTMLInputElement).checked;
+    state.isLoopEnabled = isChecked;
+    const loopDelayContainer = byId("loop-delay-container");
+    if (isChecked) {
+      loopDelayContainer.classList.remove("hidden");
+    } else {
+      loopDelayContainer.classList.add("hidden");
+    }
+  });
+  
+  // Step 3 - Loop delay input
+  byId("loop-delay-input").addEventListener("input", (e) => {
+    const delay = parseInt((e.target as HTMLInputElement).value) || 60;
+    state.loopDelay = delay;
   });
   
   // Close niche detail
